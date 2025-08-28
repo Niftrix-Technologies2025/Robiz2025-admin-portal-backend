@@ -209,4 +209,56 @@ router.post("/users/suspend-user", upload.none(), async (req, res) => {
     }
 });
 
+// Activate a suspended user: POST /admin-api/users/activate-user
+router.post("/users/activate-user", upload.none(), async (req, res) => {
+  try {
+    let userId =
+      typeof req.body === "number" ? req.body :
+      typeof req.body === "string" ? parseInt(req.body, 10) :
+      req.body?.userId != null     ? parseInt(req.body.userId, 10) :
+      req.body?.params?.userId != null ? parseInt(req.body.params.userId, 10) : // handles your current frontend shape
+      req.query?.userId != null    ? parseInt(req.query.userId, 10) :
+      NaN;
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid userId" });
+    }
+
+    // Try to activate only if currently SUSPENDED
+    const upd = await pool.query(
+      `UPDATE public.users
+          SET status = 'ACTIVE'
+        WHERE user_id = $1
+          AND status = 'SUSPENDED'
+        RETURNING user_id, status`,
+      [userId]
+    );
+
+    if (upd.rowCount === 1) {
+      return res.status(200).json({ success: true, userId, status: "ACTIVE" });
+    }
+
+    // Nothing updated: find out why
+    const chk = await pool.query(
+      `SELECT status FROM public.users WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (chk.rowCount === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const current = chk.rows[0].status;
+    if (current === "ACTIVE") {
+      return res.status(409).json({ success: false, message: "Already ACTIVE" });
+    }
+
+    return res.status(400).json({ success: false, message: "Only SUSPENDED users can be activated" });
+  } catch (e) {
+    console.error("activate-user error:", e && (e.stack || e));
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
 module.exports = router;
