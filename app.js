@@ -16,8 +16,6 @@ const Jwt = require("./util/jwt");
 const { authenticateToken } = require("./middleware/authJwt");
 const app = express();
 
-
-
 // app.set("trust proxy", 1);
 // app.use(
 //     cors({
@@ -45,7 +43,6 @@ app.use("/admin-api", adminSearchRoutes);
 
 const adminProfileRoutes = require("./routes/admin.profile.route");
 app.use("/admin-api", adminProfileRoutes);
-
 
 app.post("/admin-api/auth/login", async (req, res) => {
     const jwtSecretKey = Jwt.jwtSecretKey;
@@ -147,12 +144,16 @@ app.get("/admin-api/get-profile", authenticateToken, async (req, res) => {
     }
 });
 
-app.post("/admin-api/users/fetch-all-users", async (req, res) => {
+app.post("/admin-api/users/fetch-unverified-users", async (req, res) => {
     try {
-        const { rows } = await pool.query(`SELECT * FROM users`);
+        const { rows } = await pool.query(
+            `SELECT user_id,firstname,lastname,email 
+            FROM users
+            WHERE status = 'NEW'`
+        );
         return res.json(rows);
     } catch (err) {
-        console.error("POST /admin-api/fetch-all-users failed:", err);
+        console.error("POST /admin-api/fetch-unverified-users failed:", err);
 
         return res.status(500).json({
             error: "Unexpected server error. Please try again later.",
