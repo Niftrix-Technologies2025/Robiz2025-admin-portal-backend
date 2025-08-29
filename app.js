@@ -47,6 +47,10 @@ app.use("/admin-api", adminProfileRoutes);
 const adminBulkRoutes = require("./routes/admin.bulk.route");
 app.use("/admin-api", adminBulkRoutes);
 
+const adminNotificationRoutes = require("./routes/admin.notification.route");
+app.use("/admin-api", adminNotificationRoutes);
+
+
 
 app.post("/admin-api/auth/login", async (req, res) => {
     const jwtSecretKey = Jwt.jwtSecretKey;
