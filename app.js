@@ -50,8 +50,6 @@ app.use("/admin-api", adminBulkRoutes);
 const adminNotificationRoutes = require("./routes/admin.notification.route");
 app.use("/admin-api", adminNotificationRoutes);
 
-
-
 app.post("/admin-api/auth/login", async (req, res) => {
     const jwtSecretKey = Jwt.jwtSecretKey;
     const jwtExpiration = Jwt.jwtExpiration;
@@ -152,17 +150,55 @@ app.get("/admin-api/get-profile", authenticateToken, async (req, res) => {
     }
 });
 
+// app.post("/admin-api/users/fetch-unverified-users", async (req, res) => {
+//     try {
+//         const { rows } = await pool.query(
+//             `SELECT user_id,firstname,lastname,email
+//             FROM users
+//             WHERE status = 'NEW'`
+//         );
+//         return res.json(rows);
+//     } catch (err) {
+//         console.error("POST /admin-api/fetch-unverified-users failed:", err);
+
+//         return res.status(500).json({
+//             error: "Unexpected server error. Please try again later.",
+//         });
+//     }
+// });
 app.post("/admin-api/users/fetch-unverified-users", async (req, res) => {
     try {
-        const { rows } = await pool.query(
-            `SELECT user_id,firstname,lastname,email 
-            FROM users
-            WHERE status = 'NEW'`
+        // 1. Get page and limit from request, with defaults
+        const { page = 1, limit = 100 } = req.body;
+        const pageNum = Math.max(1, parseInt(page, 10));
+        const pageSize = Math.max(1, parseInt(limit, 10));
+        const offset = (pageNum - 1) * pageSize;
+
+        // 2. Get total count
+        const totalResult = await pool.query(
+            `SELECT COUNT(*) FROM users WHERE status = 'NEW'`
         );
-        return res.json(rows);
+        const total = parseInt(totalResult.rows[0].count, 10);
+
+        // 3. Get paginated users
+        const { rows } = await pool.query(
+            `SELECT user_id, firstname, lastname, email
+             FROM users
+             WHERE status = 'NEW'
+             ORDER BY user_id
+             LIMIT $1 OFFSET $2`,
+            [pageSize, offset]
+        );
+
+        // 4. Return users and total count
+        return res.json({
+            users: rows,
+            total,
+            page: pageNum,
+            limit: pageSize,
+        });
     } catch (err) {
         console.error("POST /admin-api/fetch-unverified-users failed:", err);
-
         return res.status(500).json({
             error: "Unexpected server error. Please try again later.",
         });
