@@ -6,7 +6,7 @@ const pool = require("../db");
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB per file
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB per fil3e
 });
 
 const TYPE_MAP = {
