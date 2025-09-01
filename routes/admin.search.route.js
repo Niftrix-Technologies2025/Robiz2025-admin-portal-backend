@@ -157,6 +157,115 @@
 // module.exports = router;
 
 
+// const express = require("express");
+// const router = express.Router();
+// const multer = require("multer");
+// const upload = multer(); // parse multipart/form-data
+// const pool = require("../db");
+
+// const ALLOWED_ATTR = new Set([
+//   "email",
+//   "firstname",
+//   "lastname",
+//   "mobile_number",
+//   "district_id",
+//   "club_name",
+// ]);
+
+// // Map dropdown => actual DB column in public.users
+// const COL_MAP = {
+//   email: "email",
+//   firstname: "firstname",
+//   lastname: "lastname",
+//   mobile_number: "mobile_number",
+//   district_id: "district_id",
+//   club_name: "club_name",
+// };
+
+// function toInt(v, def) {
+//   const n = parseInt(v, 10);
+//   return Number.isInteger(n) && n > 0 ? n : def;
+// }
+
+// router.post("/users/search-profiles", upload.none(), async (req, res) => {
+//   try {
+//     const searchQuery = (req.body?.searchQuery ?? "").toString().trim();
+//     const searchAttribute = (req.body?.searchAttribute ?? "").toString().trim();
+//     const page = toInt(req.body?.page, 1);
+//     const limitRaw = toInt(req.body?.limit, 10);
+//     const limit = Math.min(Math.max(limitRaw, 1), 100); // 1..100
+//     const offset = (page - 1) * limit;
+
+//     if (!searchQuery || !searchAttribute) {
+//       return res.status(400).json({ success: false, message: "searchQuery and searchAttribute are required" });
+//     }
+//     if (!ALLOWED_ATTR.has(searchAttribute)) {
+//       return res.status(400).json({ success: false, message: "Invalid searchAttribute" });
+//     }
+
+//     const col = COL_MAP[searchAttribute];
+//     const q = `%${searchQuery.toLowerCase()}%`;
+
+//     // WHERE: cast to text for consistent partial/ci search
+//     const whereSql = `LOWER((u.${col})::text) LIKE $1`;
+//     const whereParams = [q];
+
+//     // 1) total count
+//     const countSql = `
+//       SELECT COUNT(*)::int AS total
+//         FROM public.users u
+//        WHERE ${whereSql}
+//     `;
+//     const countRes = await pool.query(countSql, whereParams);
+//     const total = countRes.rows[0]?.total ?? 0;
+
+//     // 2) page results
+//     const dataSql = `
+//       SELECT
+//         u.user_id,
+//         u.firstname,
+//         u.lastname,
+//         u.email,
+//         u.mobile_number,
+//         u.district_id,
+//         u.club_name,
+//         u.status
+//       FROM public.users u
+//       WHERE ${whereSql}
+//       ORDER BY u.user_id ASC
+//       LIMIT $2 OFFSET $3
+//     `;
+//     const dataRes = await pool.query(dataSql, [whereParams[0], limit, offset]);
+
+//     const results = dataRes.rows.map(r => ({
+//       userId: r.user_id,
+//       name: [r.firstname, r.lastname].filter(Boolean).join(" ").trim(),
+//       district: r.district_id != null ? String(r.district_id) : "",
+//       clubName: r.club_name || "",
+//       emailId: r.email || "",
+//       mobileNumber: r.mobile_number || "",
+//       status: r.status || "",
+//     }));
+
+//     const totalPages = Math.max(Math.ceil(total / limit), 1);
+
+//     return res.status(200).json({
+//       success: true,
+//       page,
+//       limit,
+//       total,
+//       totalPages,
+//       results,
+//     });
+//   } catch (e) {
+//     console.error("search-profiles (paginated) error:", e && (e.stack || e));
+//     return res.status(500).json({ success: false, message: "Server error" });
+//   }
+// });
+
+// module.exports = router;
+
+// routes/admin.search.route.js
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
@@ -191,24 +300,32 @@ router.post("/users/search-profiles", upload.none(), async (req, res) => {
   try {
     const searchQuery = (req.body?.searchQuery ?? "").toString().trim();
     const searchAttribute = (req.body?.searchAttribute ?? "").toString().trim();
-    const page = toInt(req.body?.page, 1);
-    const limitRaw = toInt(req.body?.limit, 10);
-    const limit = Math.min(Math.max(limitRaw, 1), 100); // 1..100
-    const offset = (page - 1) * limit;
 
-    if (!searchQuery || !searchAttribute) {
-      return res.status(400).json({ success: false, message: "searchQuery and searchAttribute are required" });
-    }
-    if (!ALLOWED_ATTR.has(searchAttribute)) {
-      return res.status(400).json({ success: false, message: "Invalid searchAttribute" });
+    // Pagination to match your fetch-unverified-users pattern
+    const pageNum = toInt(req.body?.page, 1);
+    const pageSizeRaw = toInt(req.body?.limit, 100);
+    const pageSize = Math.min(Math.max(pageSizeRaw, 1), 100); // 1..100
+    const offset = (pageNum - 1) * pageSize;
+
+    if (!searchQuery || !searchAttribute || !ALLOWED_ATTR.has(searchAttribute)) {
+      return res.status(400).json({
+        error: "searchQuery and a valid searchAttribute are required",
+      });
     }
 
     const col = COL_MAP[searchAttribute];
-    const q = `%${searchQuery.toLowerCase()}%`;
 
-    // WHERE: cast to text for consistent partial/ci search
-    const whereSql = `LOWER((u.${col})::text) LIKE $1`;
-    const whereParams = [q];
+    // WHERE: exact numeric match for district_id when numeric, otherwise case-insensitive contains
+    let whereSql, whereParam;
+    const isNumericDistrict =
+      searchAttribute === "district_id" && /^\d+$/.test(searchQuery);
+    if (isNumericDistrict) {
+      whereSql = `CAST(u.${col} AS TEXT) = $1`;
+      whereParam = String(parseInt(searchQuery, 10));
+    } else {
+      whereSql = `LOWER((u.${col})::text) LIKE $1`;
+      whereParam = `%${searchQuery.toLowerCase()}%`;
+    }
 
     // 1) total count
     const countSql = `
@@ -216,10 +333,10 @@ router.post("/users/search-profiles", upload.none(), async (req, res) => {
         FROM public.users u
        WHERE ${whereSql}
     `;
-    const countRes = await pool.query(countSql, whereParams);
+    const countRes = await pool.query(countSql, [whereParam]);
     const total = countRes.rows[0]?.total ?? 0;
 
-    // 2) page results
+    // 2) page rows (raw fields to match your fetch-unverified-users response style)
     const dataSql = `
       SELECT
         u.user_id,
@@ -232,34 +349,23 @@ router.post("/users/search-profiles", upload.none(), async (req, res) => {
         u.status
       FROM public.users u
       WHERE ${whereSql}
-      ORDER BY u.user_id ASC
+      ORDER BY u.user_id
       LIMIT $2 OFFSET $3
     `;
-    const dataRes = await pool.query(dataSql, [whereParams[0], limit, offset]);
+    const dataRes = await pool.query(dataSql, [whereParam, pageSize, offset]);
 
-    const results = dataRes.rows.map(r => ({
-      userId: r.user_id,
-      name: [r.firstname, r.lastname].filter(Boolean).join(" ").trim(),
-      district: r.district_id != null ? String(r.district_id) : "",
-      clubName: r.club_name || "",
-      emailId: r.email || "",
-      mobileNumber: r.mobile_number || "",
-      status: r.status || "",
-    }));
-
-    const totalPages = Math.max(Math.ceil(total / limit), 1);
-
-    return res.status(200).json({
-      success: true,
-      page,
-      limit,
+    // 3) Return in the same envelope shape you used for fetch-unverified-users
+    return res.json({
+      users: dataRes.rows,
       total,
-      totalPages,
-      results,
+      page: pageNum,
+      limit: pageSize,
     });
   } catch (e) {
-    console.error("search-profiles (paginated) error:", e && (e.stack || e));
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("POST /admin-api/users/search-profiles failed:", e);
+    return res.status(500).json({
+      error: "Unexpected server error. Please try again later.",
+    });
   }
 });
 
