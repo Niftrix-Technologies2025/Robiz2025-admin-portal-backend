@@ -50,6 +50,13 @@ app.use("/admin-api", adminBulkRoutes);
 const adminNotificationRoutes = require("./routes/admin.notification.route");
 app.use("/admin-api", adminNotificationRoutes);
 
+// app.js
+const adminActivityRoutes = require("./routes/admin.activity.route");
+app.use("/admin-api", adminActivityRoutes);
+
+const adminPremiumRoutes = require("./routes/admin.premium.route");
+app.use("/admin-api", adminPremiumRoutes);
+
 app.post("/admin-api/auth/login", async (req, res) => {
     const jwtSecretKey = Jwt.jwtSecretKey;
     const jwtExpiration = Jwt.jwtExpiration;
