@@ -60,6 +60,9 @@ app.use("/admin-api", adminPremiumRoutes);
 const adminSettingsRoutes = require("./routes/admin.settings.route");
 app.use("/admin-api", adminSettingsRoutes);
 
+const adminContentRoutes = require("./routes/admin.content.route");
+app.use("/admin-api", adminContentRoutes);
+
 
 app.post("/admin-api/auth/login", async (req, res) => {
     const jwtSecretKey = Jwt.jwtSecretKey;
