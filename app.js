@@ -63,6 +63,9 @@ app.use("/admin-api", adminSettingsRoutes);
 const adminContentRoutes = require("./routes/admin.content.route");
 app.use("/admin-api", adminContentRoutes);
 
+const activitySplitRoutes = require("./routes/admin.activity.split.route");
+app.use("/admin-api", activitySplitRoutes);
+
 
 app.post("/admin-api/auth/login", async (req, res) => {
     const jwtSecretKey = Jwt.jwtSecretKey;
