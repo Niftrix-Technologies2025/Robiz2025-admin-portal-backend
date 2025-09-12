@@ -198,7 +198,7 @@ app.post("/admin-api/users/fetch-unverified-users", async (req, res) => {
         const { rows } = await pool.query(
             `SELECT user_id, firstname, lastname, email
              FROM users
-             WHERE status = 'NEW'
+             WHERE status = 'NEW' and is_registered = true
              ORDER BY user_id
              LIMIT $1 OFFSET $2`,
             [pageSize, offset]
